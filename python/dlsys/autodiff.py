@@ -177,10 +177,11 @@ class AddByConstOp(Op):
         return [output_grad]
 
     def infer_shape(self, node, input_shapes):
-        """TODO: Your code here"""
+        return broadcast_rule(input_shapes[0], input_shapes[1])
 
     def compiled_func(self, node, input_shapes, tgt, tgt_host):
-        """TODO: Your code here"""
+        inferred_shape = self.infer_shape(node, input_shapes)
+        return tvm_op.make_elemwise_add_by_const(inferred_shape, node.const_attr, tgt, tgt_host, "add_b")
 
 class MulOp(Op):
     def __call__(self, node_A, node_B):
@@ -217,13 +218,14 @@ class MulByConstOp(Op):
         compiled_func(input_vals[0], output_val)  
 
     def gradient(self, node, output_grad):
-        return [node.const_attr * output_grad]
+        return [mul_byconst_op(output_grad, node.const_attr)]
 
     def infer_shape(self, node, input_shapes):
-        """TODO: Your code here"""
+        return input_shapes[0]
 
     def compiled_func(self, node, input_shapes, tgt, tgt_host):
-        """TODO: Your code here"""
+        inferred_shape = self.infer_shape(node, input_shapes)
+        return tvm_op.make_elemwise_mul_by_const(inferred_shape, node.const_attr, tgt, tgt_host, "mul_by_const")
 
 class MatMulOp(Op):
     def __call__(self, node_A, node_B, trans_A=False, trans_B=False):
@@ -336,7 +338,7 @@ class OnesLikeOp(Op):
 
     def infer_shape(self, node, input_shapes):
         """If input_shape is a vector, simpler to return (1,)"""
-        """TODO: Your code here"""
+        return input_shapes[0]
 
     def compiled_func(self, node, input_shapes, tgt, tgt_host):
         return None
@@ -472,7 +474,7 @@ class ReluOp(Op):
         """TODO: Your code here"""
 
     def compiled_func(self, node, input_shapes, tgt, tgt_host):
-        """TODO: Your code here"""
+        return tvm_op.make_relu(infer_shape)
 
 
 class ReluGradientOp(Op):
