@@ -569,6 +569,9 @@ class Executor(object):
         self.node_to_shape_map = {}
         for node in self.topo_order:
             if isinstance(node.op, PlaceholderOp):
+                self.node_to_shape_map[node] = feed_shapes[node]
+            else:
+                self.node_to_shape_map[node] = node.op.infer_shape(node, [inp.shape for inp in node.inputs])
 
 
     def memory_plan(self, feed_shapes):
@@ -596,7 +599,11 @@ class Executor(object):
         ----------
         feed_shapes: node->shapes mapping for feed_dict nodes.
         """
-        """TODO: Your code here"""
+        tgt = "llvm"
+        tgt_host = "llvm"
+        for node in self.topo_order:
+            if not isinstance(node, PlaceholderOp):
+                self.node_to_compiled_func[node] = node.op.compiled_func(node, [inp.shape for inp in node.inputs], tgt, tgt_host)
 
     def run(self, feed_dict, convert_to_numpy_ret_vals=False):
         """
