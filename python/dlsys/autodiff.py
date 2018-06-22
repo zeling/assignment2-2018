@@ -157,8 +157,7 @@ class AddOp(Op):
         return broadcast_rule(input_shapes[0], input_shapes[1])
 
     def compiled_func(self, node, input_shapes, tgt, tgt_host):
-        return tvm_op.make_elemwise_add(
-            input_shapes[0], tgt, tgt_host, "elem_add")
+        return tvm_op.make_elemwise_add(input_shapes[0], tgt, tgt_host, "ewise_add")
 
 
 class AddByConstOp(Op):
@@ -177,11 +176,10 @@ class AddByConstOp(Op):
         return [output_grad]
 
     def infer_shape(self, node, input_shapes):
-        return broadcast_rule(input_shapes[0], input_shapes[1])
+        return input_shapes[0]
 
     def compiled_func(self, node, input_shapes, tgt, tgt_host):
-        inferred_shape = self.infer_shape(node, input_shapes)
-        return tvm_op.make_elemwise_add_by_const(inferred_shape, node.const_attr, tgt, tgt_host, "add_b")
+        return tvm_op.make_elemwise_add_by_const(input_shapes[0], node.const_attr, tgt, tgt_host, "ewise_add_const")
 
 class MulOp(Op):
     def __call__(self, node_A, node_B):
@@ -199,11 +197,10 @@ class MulOp(Op):
         return [node.inputs[1] * output_grad, node.inputs[0] * output_grad]
 
     def infer_shape(self, node, input_shapes):
-        """Need to handle input_vals[0].shape != input_vals[1].shape"""
-        """TODO: Your code here"""
+        return broadcast_rule(input_shapes[0], input_shapes[1])
 
     def compiled_func(self, node, input_shapes, tgt, tgt_host):
-        """TODO: Your code here"""
+        return tvm_op.make_elemwise_mul(input_shapes[0], tgt, tgt_host, "ewise_mul")
 
 class MulByConstOp(Op):
     def __call__(self, node_A, const_val):
@@ -224,8 +221,7 @@ class MulByConstOp(Op):
         return input_shapes[0]
 
     def compiled_func(self, node, input_shapes, tgt, tgt_host):
-        inferred_shape = self.infer_shape(node, input_shapes)
-        return tvm_op.make_elemwise_mul_by_const(inferred_shape, node.const_attr, tgt, tgt_host, "mul_by_const")
+        return tvm_op.make_elemwise_mul_by_const(input_shapes[0], node.const_attr, tgt, tgt_host, "mul_by_const")
 
 class MatMulOp(Op):
     def __call__(self, node_A, node_B, trans_A=False, trans_B=False):
@@ -272,10 +268,28 @@ class MatMulOp(Op):
         return [lhs_grad, rhs_grad]
 
     def infer_shape(self, node, input_shapes):
-        """TODO: Your code here"""
+        assert (len(input_shapes) == 2)
+        m, n = input_shapes[0]
+        a, b = input_shapes[1]
+
+        if node.matmul_attr_trans_A:
+            if node.matmul_attr_trans_B:
+                assert m == b
+                return (n, a)
+            else:
+                assert m == a
+                return (n, b)
+        else:
+            if node.matmul_attr_trans_B:
+                assert n == b
+                return (m, a)
+            else:
+                assert n == a
+                return (m, b)
 
     def compiled_func(self, node, input_shapes, tgt, tgt_host):
-        """TODO: Your code here"""
+        return tvm_op.make_matrix_mul(input_shapes[0], node.matmul_attr_trans_A,
+                                      input_shapes[1], node.matmul_attr_trans_B, tgt, tgt_host, "matmul")
         
 
 class PlaceholderOp(Op):
@@ -314,7 +328,7 @@ class ZerosLikeOp(Op):
 
     def infer_shape(self, node, input_shapes):
         """If input_shape is a vector, simpler to return (1,)"""
-        """TODO: Your code here"""
+        return input_shapes[0]
 
     def compiled_func(self, node, input_shapes, tgt, tgt_host):
         return None
@@ -396,10 +410,10 @@ class BroadcastToOp(Op):
         return [grad_A, grad_B]
 
     def infer_shape(self, node, input_shapes):
-        """TODO: Your code here"""
+        return input_shapes[1]
 
     def compiled_func(self, node, input_shapes, tgt, tgt_host):
-        """TODO: Your code here"""
+        return tvm_op.make_broadcast_to(input_shapes[0], input_shapes[1], tgt, tgt_host, "broadcast")
 
 def softmax_func(y):
     """Numerically stable softmax."""
@@ -429,10 +443,10 @@ class SoftmaxCrossEntropyOp(Op):
         return [grad_A, grad_B]
 
     def infer_shape(self, node, input_shapes):
-        """TODO: Your code here"""
+        return (1,)
 
     def compiled_func(self, node, input_shapes, tgt, tgt_host):
-        """TODO: Your code here"""
+        return tvm_op.make_matrix_softmax_cross_entropy(input_shapes[0], tgt, tgt_host, "softmax_xent_loss")
 
 class SoftmaxOp(Op):
     def __call__(self, node_A):
@@ -451,10 +465,10 @@ class SoftmaxOp(Op):
         raise NotImplementedError
 
     def infer_shape(self, node, input_shapes):
-        """TODO: Your code here"""
+        return input_shapes[0]
 
     def compiled_func(self, node, input_shapes, tgt, tgt_host):
-        """TODO: Your code here"""
+        return tvm_op.make_matrix_softmax(input_shapes[0], tgt, tgt_host, "softmax")
 
 
 class ReluOp(Op):
@@ -471,10 +485,10 @@ class ReluOp(Op):
         return [relu_gradient_op(node.inputs[0], output_grad)]
 
     def infer_shape(self, node, input_shapes):
-        """TODO: Your code here"""
+        return input_shapes[0]
 
     def compiled_func(self, node, input_shapes, tgt, tgt_host):
-        return tvm_op.make_relu(infer_shape)
+        return tvm_op.make_relu(input_shapes[0], tgt, tgt_host, "relu")
 
 
 class ReluGradientOp(Op):
@@ -492,10 +506,10 @@ class ReluGradientOp(Op):
         raise NotImplementedError
 
     def infer_shape(self, node, input_shapes):
-        """TODO: Your code here"""
+        return input_shapes[0]
 
     def compiled_func(self, node, input_shapes, tgt, tgt_host):
-        """TODO: Your code here"""
+        return tvm_op.make_relu_gradient(input_shapes[0], tgt, tgt_host, "relu_grad")
 
 # Create global singletons of operators.
 add_op = AddOp()
@@ -552,7 +566,10 @@ class Executor(object):
         ----------
         feed_shapes: node->shapes mapping for feed_dict nodes.
         """
-        """TODO: Your code here"""
+        self.node_to_shape_map = {}
+        for node in self.topo_order:
+            if isinstance(node.op, PlaceholderOp):
+
 
     def memory_plan(self, feed_shapes):
         """Allocates tvm.nd.array for every node except feed_dict nodes.
